@@ -143,35 +143,86 @@ export function validateSpec(spec) {
   return { title: String(spec.title || 'Generated UI'), accent, sections }
 }
 
-export async function generateWithGemini(prompt, apiKey) {
-  const url =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' +
-    encodeURIComponent(apiKey)
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: SCHEMA_HELP + '\n\nUser request: ' + prompt }] }],
-      generationConfig: { temperature: 0.7, responseMimeType: 'application/json' },
-    }),
-  })
-  if (!res.ok) {
-    let detail = ''
-    try {
-      const j = await res.json()
-      detail = j && j.error && j.error.message ? j.error.message : ''
-    } catch (e) {
-      /* ignore */
-    }
-    throw new Error('Gemini request failed (' + res.status + ')' + (detail ? ': ' + detail : ''))
+async function getAvailableModels(apiKey) {
+  try {
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
+      headers: { 'x-goog-api-key': apiKey },
+    })
+    if (!res.ok) return ['gemini-3.8-flash']
+    const data = await res.json()
+    const valid = (data.models || [])
+      .filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+      .map((m) => m.name.replace(/^models\//, ''))
+      .filter((name) => name.includes('gemini') && !name.includes('vision') && !name.includes('embedding'))
+
+    // Prefer flash/latest models first for fast UI generation
+    valid.sort((a, b) => {
+      const score = (n) => (n.includes('3.8-flash') ? 0 : n.includes('flash') ? 1 : n.includes('pro') ? 2 : 3)
+      return score(a) - score(b)
+    })
+
+    return valid.length > 0 ? valid.slice(0, 4) : ['gemini-3.8-flash']
+  } catch {
+    return ['gemini-3.8-flash']
   }
-  const data = await res.json()
-  const text =
-    data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts
-      ? data.candidates[0].content.parts.map((p) => p.text || '').join('')
-      : ''
-  const cleaned = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
-  return validateSpec(JSON.parse(cleaned))
+}
+
+export async function generateWithGemini(prompt, apiKey) {
+  const models = await getAvailableModels(apiKey)
+  let lastError = null
+
+  for (const model of models) {
+    // Try up to 2 times per model in case of temporary 503 traffic spike
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: SCHEMA_HELP + '\n\nUser request: ' + prompt }] }],
+            generationConfig: { temperature: 0.7, responseMimeType: 'application/json' },
+          }),
+        })
+
+        if (!res.ok) {
+          let detail = ''
+          try {
+            const j = await res.json()
+            detail = j?.error?.message || ''
+          } catch {
+            /* ignore */
+          }
+          lastError = new Error(`Gemini request failed (${res.status})${detail ? ': ' + detail : ''}`)
+
+          // If temporary 503 overload, wait 1.2s and retry once before moving to next model
+          if (res.status === 503 && attempt === 0) {
+            await new Promise((r) => setTimeout(r, 1200))
+            continue
+          }
+          if ([404, 429, 500, 503].includes(res.status)) break
+          throw lastError
+        }
+
+        const data = await res.json()
+        const text =
+          data?.candidates?.[0]?.content?.parts
+            ? data.candidates[0].content.parts.map((p) => p.text || '').join('')
+            : ''
+        const cleaned = text.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim()
+        return validateSpec(JSON.parse(cleaned))
+      } catch (err) {
+        lastError = err
+        break
+      }
+    }
+  }
+
+  throw lastError || new Error('Gemini servers are temporarily busy. Please try again in a moment.')
 }
 
 // ---------------------------------------------------------------------------
