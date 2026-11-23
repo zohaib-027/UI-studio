@@ -1,5 +1,20 @@
 export const themesData = [
   {
+    id: 'rose-quartz',
+    name: 'Rose Quartz',
+    mode: 'light',
+    description: 'Editorial blush-peach pastel canvas with rose and coral accents.',
+    colors: {
+      bg: '#fff6f5',
+      surface: '#ffffff',
+      fg: '#290d16',
+      muted: '#8f5264',
+      line: '#f7d4d9',
+      primary: '#e11d48',
+      accent: '#f97316',
+    },
+  },
+  {
     id: 'dark',
     name: 'Studio Dark',
     mode: 'dark',
@@ -104,8 +119,6 @@ export const themesData = [
       accent: '#818cf8',
     },
   },
-
-  /* -------------------- 12 NEW GLOBAL THEMES -------------------- */
   {
     id: 'cyberpunk',
     name: 'Cyberpunk 2077',
@@ -271,29 +284,14 @@ export const themesData = [
       accent: '#a1a1aa',
     },
   },
-  {
-    id: 'rose-quartz',
-    name: 'Rose Quartz',
-    mode: 'light',
-    description: 'Editorial blush pastel canvas with ruby and grape accents.',
-    colors: {
-      bg: '#fff5f7',
-      surface: '#ffffff',
-      fg: '#270914',
-      muted: '#884d62',
-      line: '#f5d0dc',
-      primary: '#e11d48',
-      accent: '#9333ea',
-    },
-  },
 ]
 
-// Alias export in case useTheme.js imports `themes`
 export const themes = themesData
+export const DEFAULT_THEME_ID = 'rose-quartz'
 
 export function hexToRgbString(hex) {
   const clean = hex.replace('#', '')
-  if (clean.length !== 6) return '99 102 241'
+  if (clean.length !== 6) return '225 29 72'
   const r = parseInt(clean.slice(0, 2), 16)
   const g = parseInt(clean.slice(2, 4), 16)
   const b = parseInt(clean.slice(4, 6), 16)

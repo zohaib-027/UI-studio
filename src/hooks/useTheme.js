@@ -1,50 +1,44 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { themes, applyTheme } from '../data/themesData'
+import { createContext, createElement, useContext, useEffect, useState } from 'react'
+import { applyTheme, themesData } from '../data/themesData'
 
-const STORAGE_KEY = 'react-ui-studio-theme'
+const STORAGE_KEY = 'uistudio-theme-rose'
 const ThemeContext = createContext(null)
 
-function readStoredTheme() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored && themes.some((t) => t.id === stored)) return stored
-  } catch (e) {
-    /* storage unavailable */
-  }
-  return 'dark'
-}
-
 export function ThemeProvider({ children }) {
-  const [themeId, setThemeIdState] = useState(readStoredTheme)
+  const defaultId = themesData[0]?.id || 'rose-quartz'
+
+  const [themeId, setThemeId] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved && themesData.some((t) => t.id === saved)) return saved
+    } catch {
+      // ignore storage errors
+    }
+    return defaultId
+  })
+
+  const theme = themesData.find((t) => t.id === themeId) || themesData[0]
 
   useEffect(() => {
-    applyTheme(themeId)
+    applyTheme(theme)
     try {
-      localStorage.setItem(STORAGE_KEY, themeId)
-    } catch (e) {
-      /* storage unavailable */
+      localStorage.setItem(STORAGE_KEY, theme.id)
+    } catch {
+      // ignore storage errors
     }
-  }, [themeId])
+  }, [theme])
 
-  const setThemeId = useCallback((id) => setThemeIdState(id), [])
-
-  const value = useMemo(
-    () => ({
-      themeId,
-      setThemeId,
-      themes,
-      theme: themes.find((t) => t.id === themeId) || themes[0],
-    }),
-    [themeId, setThemeId],
+  return createElement(
+    ThemeContext.Provider,
+    { value: { themes: themesData, themeId, setThemeId, theme } },
+    children
   )
-
-  return createElement(ThemeContext.Provider, { value }, children)
 }
 
 export function useTheme() {
   const ctx = useContext(ThemeContext)
-  if (!ctx) throw new Error('useTheme must be used inside <ThemeProvider>')
+  if (!ctx) {
+    throw new Error('useTheme must be used inside a ThemeProvider')
+  }
   return ctx
 }
-
-export default useTheme
